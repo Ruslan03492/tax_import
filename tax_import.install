@@ -1,0 +1,85 @@
+<?php
+
+use Drupal\taxonomy\Entity\Term;
+
+function tax_import_install() {
+  $input = 'Московская линия
+-Петровщина
+-Михалово
+-Грушевка
+-Институт Культуры
+-Площадь Ленина
+-Октябрьская
+-Площадь Победы
+-Площадь Якуба Коласа
+-Академия Наук
+-Парк Челюскинцев
+-Московская
+-Восток
+-Борисовский тракт
+-Уручье
+Автозаводская линия
+-Каменная горка
+-Кунцевщина
+-Спортивная
+-Пушкинская
+-Молодежная
+-Фрунзенская
+-Немига
+-Купаловская
+-Первомайская
+-Пролетарская
+-Тракторный завод
+-Партизанская
+-Автозаводская
+-Могилевская
+';
+tax_import_mass_add_terms($input, 'metro');
+}
+
+function tax_import_mass_add_terms($input, $vid = 'catalog') {
+  $new_terms = array();
+  $terms = explode("\n", str_replace("\r", '', $input));
+  $parents = 0;
+
+  // Stores the current lineage of newly inserted terms.
+  $last_parents = array();
+  foreach ($terms as $name) {
+    if (empty($name)) {
+      continue;
+    }
+    $matches = array();
+    // Child term prefixed with one or more dashes
+    if (preg_match('/^(-){1,}/', $name, $matches)) {
+      $depth = strlen($matches[0]);
+      $name = substr($name, $depth);
+      $current_parents = isset($last_parents[$depth-1]) ?
+        $last_parents[$depth-1] : 0;
+    }
+    // Parent term containing dashes at the beginning and is therefore wrapped
+    // in double quotes
+    elseif (preg_match('/^\"(-){1,}.*\"/', $name, $matches)) {
+      $name = substr($name, 1, -1);
+      $depth = 0;
+      $current_parents = $parents;
+    }
+    else {
+      $depth = 0;
+      $current_parents = $parents;
+    }
+    // Truncate long string names that will cause database exceptions.
+    if (strlen($name) > 255) {
+      $term_names_too_long[] = $name;
+      $name = substr($name, 0, 255);
+    }
+    $term = Term::create([
+      'name' => $name,
+      'vid' => $vid,
+      'parent' => [$current_parents]
+    ]);
+    $term->save();
+    $new_terms[] = $term->id();
+    $last_parents[$depth] = $term->id();
+  }
+  return $new_terms;
+}
